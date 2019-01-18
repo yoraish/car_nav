@@ -26,8 +26,8 @@ class navigation_leader:
 
 		# self.current_path_index = -1;
 		# paths lists, only for testing
-		self.paths = [[Point32(1.0,0.0,0.0),Point32(2.0, 0.0, 0.0)], [Point32(2.5, 0.5, 0.0), Point32(3.0, 0.5, 0.0)]]
-		
+		self.paths = [] # [[Point32(1,0,0),Point32(2, 0, 0)], [Point32(2.5, 0.5, 0.0), Point32(3.0, 0.5, 0.0)]]
+
 		# variables for map
 		self.map_origin_x = 0.0 # in the world frame
 		self.map_origin_y = 0.0
@@ -41,6 +41,9 @@ class navigation_leader:
 
 		#init ros
 		rospy.init_node('car_nav')
+
+
+
 
 		#publish to trajectory topics
 		self.path_pub = rospy.Publisher("/trajectory/current", 
@@ -131,14 +134,14 @@ class navigation_leader:
 		self.map_origin_y = map_msg.info.origin.position.y
 		self.map_grid = map_msg.data
 
-		print("=====\n map origin at x=", self.map_origin_x, " y=", self.map_origin_y)
-		robot_pixel = self.world_to_pixel(self.current_x, self.current_y);
-		print("=====\n robot at pixel x=", robot_pixel[0], " y=",robot_pixel[1])
-		print(" the value of the pixel=", self.get_pixel_value(robot_pixel[0], robot_pixel[1], self.map_grid))
+		# print("=====\n map origin at x=", self.map_origin_x, " y=", self.map_origin_y)
+		# robot_pixel = self.world_to_pixel(self.current_x, self.current_y);
+		# print("=====\n robot at pixel x=", robot_pixel[0], " y=",robot_pixel[1])
+		# print(" the value of the pixel=", self.get_pixel_value(robot_pixel[0], robot_pixel[1], self.map_grid))
 
-		robot_world= self.pixel_to_world(robot_pixel[0], robot_pixel[1])
-		print("=====\n should be at x =", self.current_x, "y=", self.current_y)
-		print(" calculated at x=", robot_world[0], "y=", robot_world[1])
+		# robot_world= self.pixel_to_world(robot_pixel[0], robot_pixel[1])
+		# print("=====\n should be at x =", self.current_x, "y=", self.current_y)
+		# print(" calculated at x=", robot_world[0], "y=", robot_world[1])
 
 
 
@@ -158,7 +161,129 @@ class navigation_leader:
 		# returns the value stored in the map_grid at that pixel
 		index = int(pixel_x + self.map_width*pixel_y) # int because index cannot be float
 		return grid[index]
-	
+
+
+	def get_possible_pixels(self, pixel_x, pixel_y, grid = None):
+		# arguments are a pixel in the map_grid
+		# returns a list of tuples of possible pixels the robot can progress to
+		# these pixels have to be in the map_grid and be vacant (value = 0)
+
+	    if grid == None:
+	        grid = self.grid_data
+
+	    # the allowed moves are up down left right
+	    # return a list of tuples that only include coordinates of cells that are empty
+	    tries = [(pixel_x, pixel_y+1), (pixel_x, pixel_y-1), (pixel_x+1, pixel_y), (pixel_x-1, pixel_y)]
+	    finals = []
+	    for coord in tries:
+	        if coord[0] < self.map_width and coord[0] >= 0 and coord[1] < self.map_height and coord[1] >= 0:
+	            if self.get_pixel_value(coord[0], coord[1], grid) in [0,'G']:
+	                finals.append(coord)
+		return finals
+
+
+	def directed_graph(self):
+		# function that creates a wighted graph
+		# this object takes the form of {coord_tuple: {neighbor0_tuple: weight, neighbor1_tuple: weight1}}
+		weighted_graph =  {};
+		for pixel_x in range(self.map_width):
+			for pixel_y in range (self.map_height):
+				pixel = (pixel_x,pixel_y)
+				# get the surrounding coords
+				neighbors = self.get_possible_pixels(pixel_x, pixel_y, self.map_grid)
+				# create the dictionary mapping adjacent nodes to their weight
+				neighbors_dict = dict()
+				for nighbor in neighbors:
+					neighbors_dict[neighbor] = 1 # all the weights are 1 in this example
+				# add the pixel we are working with, with its adjacent nodes to the weighted_graph
+				weighted_graph[pixel] = neighbors_dict
+		return weighted_graph
+
+	def dijkstra_to_goal(self, weighted_graph, start, end):
+		# arguments:
+		'''
+		weighted_graph : see function above
+		start : a tuple of pixel to start navigating from, of form (x,y) in the map_grid
+		end : a tuple of pixel to end navigating at, of form (x,y) in the map_grid
+
+		returns:
+		a list of pixels of form [start, ... , pixels in between, ..., end]
+
+		'''
+		# set up initial values
+		# always need to visit the start
+		nodes_to_visit = {start}
+		visited_nodes = set()
+		distance_from_start = defaultdict(lambda: float("inf"))
+		# distance from start to start is 0
+		distance_from_start[start] = 0
+		tentative_parents = {}
+
+		while nodes_to_visit:
+			# the next node should be the one with the smalles weight
+			current = min(
+				(distance_from_start[node],node) for node in nodes_to_visit)[1]
+
+			#check if end was reached
+			if current == end:
+				break
+
+			# otherwise
+			nodes_to_visit.discard(current)
+			visited_nodes.add(current)
+
+			for neighbor, distance in weighted_graph[current].items():
+				if neighbor in visited_nodes:
+					continue
+				neighbor_distance = distance_from_start[current] + distance
+				if neighbor_distance < distance_from_start[neighbor]:
+					distance_from_start[neighbor] = neighbor_distance
+					tentative_parents[neighbor] = current
+					nodes_to_visit.add(nighbor)
+		
+		return self.deconstruct_path(tentative_parents, end)
+
+
+	def decontruct_path(self, tentative_parents, end):
+		if end not in tentative_parents:
+			return None
+
+		cursor = end
+		path = []
+		while cursor:
+			path.append(cursor)
+			cursor = tentative_parents.get(cursor)
+
+		# reverse the path
+		pixel_list = list(reversed(path))
+		return pixel_list
+
+
+	def path_from_pixels_list(self, pixels_list):
+		# returns a list of Point32 objects that can be followed by racecar
+
+		path_list = []
+		for pixel in pixels_list:
+			############### might take some points out here to make it easier on the robot to follow
+			# convert to world frame
+			coord = self.pixel_to_world(pixel[0], pixel[1])
+			# convert the coord tuple to Point32 and add to the list
+			path_list.append(Point32(coord[0], coord[1], 0.0))
+
+		return path_list
+
+
+
+
+
+
+
+
+
+
+
+
+		# convert to robot frame ('world', no longer pixels)
 
 
 
