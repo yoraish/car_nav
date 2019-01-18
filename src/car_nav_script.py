@@ -8,6 +8,7 @@ from nav_msgs.msg import Path, OccupancyGrid
 from geometry_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 import time
+from collections import defaultdict
 
 # create a class that would send waypoints to the car
 class navigation_leader:
@@ -98,6 +99,44 @@ class navigation_leader:
 			self.current_x = pose_msg.pose.position.x
 			self.current_y = pose_msg.pose.position.y
 
+
+			# if this is the first time and we have enough data, generate a dijkstra path to a set point
+			if self.map_grid != [] and self.paths == []:
+				print("trying to construct path")
+				pixel_path = None
+				while pixel_path == None:
+					print("int the loop")
+					# go to (2, 0.5, 0)
+					end_coord = (2,0)
+
+
+					# p = []
+					# # print the value in the map and see where we at
+					# for i in range(13, 33):
+					# 	p.append(self.get_pixel_value(i, 50, self.map_grid))
+					# print(p)
+
+
+
+
+
+
+					# first step is to convet start and end coord to pixels
+					start_pixel = self.world_to_pixel(self.current_x, self.current_y)
+					end_pixel = self.world_to_pixel(end_coord[0],end_coord[1])
+					# get the pixel path from dijkstra
+					pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
+				# convert to a follow-able path (of Point32 objects in the world frame. no longer pixels)
+				path_example = self.path_from_pixels_list(pixel_path)
+				# go there - add this path to the paths to follow
+				print(path_example)
+				self.paths.append(path_example)
+
+
+
+
+
+
             # if we have rerached the goal, go to the next path
 			if self.reached_goal:
 				# check if there are remaining paths
@@ -175,14 +214,17 @@ class navigation_leader:
 	    # return a list of tuples that only include coordinates of cells that are empty
 	    tries = [(pixel_x, pixel_y+1), (pixel_x, pixel_y-1), (pixel_x+1, pixel_y), (pixel_x-1, pixel_y)]
 	    finals = []
+	    print("tries", tries)
 	    for coord in tries:
 	        if coord[0] < self.map_width and coord[0] >= 0 and coord[1] < self.map_height and coord[1] >= 0:
-	            if self.get_pixel_value(coord[0], coord[1], grid) in [0,'G']:
+	            if self.get_pixel_value(coord[0], coord[1], grid) in [0, '0', -1]:
 	                finals.append(coord)
+
+		print("neighbors for", pixel_x, pixel_y, finals,  "with map size is width=", self.map_width, "height=", self.map_height)
 		return finals
 
 
-	def directed_graph(self):
+	def weighted_graph(self):
 		# function that creates a wighted graph
 		# this object takes the form of {coord_tuple: {neighbor0_tuple: weight, neighbor1_tuple: weight1}}
 		weighted_graph =  {};
@@ -193,10 +235,11 @@ class navigation_leader:
 				neighbors = self.get_possible_pixels(pixel_x, pixel_y, self.map_grid)
 				# create the dictionary mapping adjacent nodes to their weight
 				neighbors_dict = dict()
-				for nighbor in neighbors:
+				for neighbor in neighbors:
 					neighbors_dict[neighbor] = 1 # all the weights are 1 in this example
 				# add the pixel we are working with, with its adjacent nodes to the weighted_graph
 				weighted_graph[pixel] = neighbors_dict
+
 		return weighted_graph
 
 	def dijkstra_to_goal(self, weighted_graph, start, end):
@@ -212,6 +255,7 @@ class navigation_leader:
 		'''
 		# set up initial values
 		# always need to visit the start
+		print("in dijkstra from ", start, "to", end)
 		nodes_to_visit = {start}
 		visited_nodes = set()
 		distance_from_start = defaultdict(lambda: float("inf"))
@@ -239,12 +283,13 @@ class navigation_leader:
 				if neighbor_distance < distance_from_start[neighbor]:
 					distance_from_start[neighbor] = neighbor_distance
 					tentative_parents[neighbor] = current
-					nodes_to_visit.add(nighbor)
+					nodes_to_visit.add(neighbor)
+
 		
 		return self.deconstruct_path(tentative_parents, end)
 
 
-	def decontruct_path(self, tentative_parents, end):
+	def deconstruct_path(self, tentative_parents, end):
 		if end not in tentative_parents:
 			return None
 
@@ -283,7 +328,6 @@ class navigation_leader:
 
 
 
-		# convert to robot frame ('world', no longer pixels)
 
 
 
