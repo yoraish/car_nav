@@ -101,13 +101,14 @@ class navigation_leader:
 
 
 			# if this is the first time and we have enough data, generate a dijkstra path to a set point
+			
 			if self.map_grid != [] and self.paths == []:
 				print("trying to construct path")
 				pixel_path = None
 				while pixel_path == None:
 					print("int the loop")
 					# go to (2, 0.5, 0)
-					end_coord = (2,0)
+					end_coord = (2,0.2)
 
 
 					# p = []
@@ -130,14 +131,19 @@ class navigation_leader:
 				path_example = self.path_from_pixels_list(pixel_path)
 				# go there - add this path to the paths to follow
 				print(path_example)
+				# add the last coordinate in the world frame to the class variable goal - so checking whether
+				# got there or not would be possible
+				self.goal_x = end_coord[0]
+				self.goal_y = end_coord[1]
 				self.paths.append(path_example)
+				print("success with dijkstra!")
 
 
 
 
 
 
-            # if we have rerached the goal, go to the next path
+            # if we have reached the goal, go to the next path
 			if self.reached_goal:
 				# check if there are remaining paths
 				if len(self.paths) > 0:
@@ -161,7 +167,7 @@ class navigation_leader:
 					# then we are close enough to the goal and can toggle the reach variable
 					self.reached_goal = True
 					print('reached goal')
-
+			
 
 	def map_cb(self, map_msg):
     	# callback to be fired every time a map update is being published
@@ -173,6 +179,9 @@ class navigation_leader:
 		self.map_origin_y = map_msg.info.origin.position.y
 		self.map_grid = map_msg.data
 
+
+
+		# self.look_meter_pos_x()
 		# print("=====\n map origin at x=", self.map_origin_x, " y=", self.map_origin_y)
 		# robot_pixel = self.world_to_pixel(self.current_x, self.current_y);
 		# print("=====\n robot at pixel x=", robot_pixel[0], " y=",robot_pixel[1])
@@ -182,6 +191,27 @@ class navigation_leader:
 		# print("=====\n should be at x =", self.current_x, "y=", self.current_y)
 		# print(" calculated at x=", robot_world[0], "y=", robot_world[1])
 
+	def look_meter_pos_x(self):
+		values = []
+		for dist in range (0,10):
+			# print(dist/10.0)
+			x_value = self.current_x + dist/10.0
+			y_value = self.current_y
+			pixel = self.world_to_pixel(x_value, y_value)
+			pixel_value = self.get_pixel_value(pixel[0], pixel[1], self.map_grid)
+			values.append(pixel_value)
+		print(values)
+
+	def look_meter_pos_y(self):
+		values = []
+		for dist in range (0,10):
+			# print(dist/10.0)
+			y_value = self.current_x + dist/10.0
+			x_value = self.current_y
+			pixel = self.world_to_pixel(x_value, y_value)
+			pixel_value = self.get_pixel_value(pixel[0], pixel[1], self.map_grid)
+			values.append(pixel_value)
+		print(values)
 
 
 	def world_to_pixel(self, robot_x, robot_y):
@@ -207,20 +237,34 @@ class navigation_leader:
 		# returns a list of tuples of possible pixels the robot can progress to
 		# these pixels have to be in the map_grid and be vacant (value = 0)
 
-	    if grid == None:
-	        grid = self.grid_data
+		if grid == None:
+			grid = self.map_grid
 
-	    # the allowed moves are up down left right
-	    # return a list of tuples that only include coordinates of cells that are empty
-	    tries = [(pixel_x, pixel_y+1), (pixel_x, pixel_y-1), (pixel_x+1, pixel_y), (pixel_x-1, pixel_y)]
-	    finals = []
-	    print("tries", tries)
-	    for coord in tries:
-	        if coord[0] < self.map_width and coord[0] >= 0 and coord[1] < self.map_height and coord[1] >= 0:
-	            if self.get_pixel_value(coord[0], coord[1], grid) in [0, '0', -1]:
-	                finals.append(coord)
+		# the allowed moves are up down left right
+		# return a list of tuples that only include coordinates of cells that are empty
+		tries = [] #[(pixel_x, pixel_y+1), (pixel_x, pixel_y-1), (pixel_x+1, pixel_y), (pixel_x-1, pixel_y)]
 
-		print("neighbors for", pixel_x, pixel_y, finals,  "with map size is width=", self.map_width, "height=", self.map_height)
+		tries += [(pixel_x, pixel_y+1)]
+		tries.append((pixel_x, pixel_y-1))
+		tries.append((pixel_x+1, pixel_y))
+		tries.append((pixel_x-1, pixel_y))
+
+		# print tries
+
+		finals = []
+		for coord in tries:
+
+			if coord[0] < self.map_width and coord[0] >= 0 and coord[1] < self.map_height and coord[1] >= 0:
+
+
+				# print("for coord", coord, "value ", self.get_pixel_value(coord[0], coord[1], self.map_grid))
+
+
+				if self.get_pixel_value(coord[0], coord[1], grid) in [0, '0']:
+					finals.append(coord)
+
+		# print("neighbors for", pixel_x, pixel_y, finals,  "with map size is width=", self.map_width, "height=", self.map_height)
+		# print "\n\n"
 		return finals
 
 
