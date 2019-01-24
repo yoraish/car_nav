@@ -9,6 +9,7 @@ from geometry_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 import time
 from collections import defaultdict
+import random
 
 # create a class that would send waypoints to the car
 class navigation_leader:
@@ -71,10 +72,11 @@ class navigation_leader:
 	def follow_path(self, path_list):
 	    # path list is a list of Point32 objects -- which are the waypoints to be followed
 	    print('#####sending a sequence')
+	    print path_list
 	    
 	    # store the last goal as the goal we are going to 
-	    self.goal_x = path_list[-1].x
-	    self.goal_y = path_list[-1].y
+	    # self.goal_x = path_list[-1].x
+	    # self.goal_y = path_list[-1].y
 
 	    # send the sequence
 	    #create a message
@@ -103,41 +105,33 @@ class navigation_leader:
 			# if this is the first time and we have enough data, generate a dijkstra path to a set point
 			
 			if self.map_grid != [] and self.paths == []:
-				print("trying to construct path")
+				print("constructing path")
 				pixel_path = None
 				while pixel_path == None:
-					print("int the loop")
+					# print("int the loop")
 					# go to (2, 0.5, 0)
-					end_coord = (2,0.2)
-
-
-					# p = []
-					# # print the value in the map and see where we at
-					# for i in range(13, 33):
-					# 	p.append(self.get_pixel_value(i, 50, self.map_grid))
-					# print(p)
-
-
-
-
-
+					end_coord =  self.get_free_random_coord(); #(2,0.2)
 
 					# first step is to convet start and end coord to pixels
 					start_pixel = self.world_to_pixel(self.current_x, self.current_y)
 					end_pixel = self.world_to_pixel(end_coord[0],end_coord[1])
 					# get the pixel path from dijkstra
 					pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
+
+
+
 				# convert to a follow-able path (of Point32 objects in the world frame. no longer pixels)
 				path_example = self.path_from_pixels_list(pixel_path)
 				# go there - add this path to the paths to follow
-				print(path_example)
 				# add the last coordinate in the world frame to the class variable goal - so checking whether
 				# got there or not would be possible
-				self.goal_x = end_coord[0]
-				self.goal_y = end_coord[1]
-				self.paths.append(path_example)
-				print("success with dijkstra!")
 
+				# end_coord = self.pixel_to_world(end_pixel[0], end_pixel[1]) ##############
+				# self.goal_x = end_coord[0]
+				# self.goal_y = end_coord[1]
+				self.paths.append(path_example)
+				print("success with dijkstra! got path")
+				self.follow_path(self.paths[0])
 
 
 
@@ -145,8 +139,12 @@ class navigation_leader:
 
             # if we have reached the goal, go to the next path
 			if self.reached_goal:
+				print "in reached goal"
+
 				# check if there are remaining paths
 				if len(self.paths) > 0:
+					print "Publishing path to follow"
+
 					# got to the first path, and set the reached variable to false
 					self.reached_goal = False;
 
@@ -160,14 +158,22 @@ class navigation_leader:
 				else:
 					# no more goals and reached goal
 					print("navigation test finished")
+					# generate a new random goal to go to
+
 
 			else:
 				# not reached goal yet, check if there now`
+
 				if abs(self.current_x - self.goal_x) < 0.15 and abs(self.current_y - self.goal_y) < 0.15:
 					# then we are close enough to the goal and can toggle the reach variable
 					self.reached_goal = True
 					print('reached goal')
-			
+					self.paths = []
+				else:
+
+					print "navigating to (",self.goal_x,", ", self.goal_y, ")"           
+					print "       d=(", abs(self.current_x - self.goal_x), ", ", abs(self.current_y - self.goal_y), ")" 
+					print "     now=(", self.current_x, ", ", self.current_y, ")"
 
 	def map_cb(self, map_msg):
     	# callback to be fired every time a map update is being published
@@ -192,6 +198,7 @@ class navigation_leader:
 		# print(" calculated at x=", robot_world[0], "y=", robot_world[1])
 
 	def look_meter_pos_x(self):
+		# prints the occupancy values in the next meter in the positive x direction
 		values = []
 		for dist in range (0,10):
 			# print(dist/10.0)
@@ -203,6 +210,7 @@ class navigation_leader:
 		print(values)
 
 	def look_meter_pos_y(self):
+		# prints the occupancy values in the next meter in the positive y direction
 		values = []
 		for dist in range (0,10):
 			# print(dist/10.0)
@@ -249,6 +257,11 @@ class navigation_leader:
 		tries.append((pixel_x+1, pixel_y))
 		tries.append((pixel_x-1, pixel_y))
 
+		tries.append((pixel_x-1, pixel_y-1))
+		tries.append((pixel_x+1, pixel_y+1))
+		tries.append((pixel_x-1, pixel_y+1))
+		tries.append((pixel_x+1, pixel_y-1))
+
 		# print tries
 
 		finals = []
@@ -259,8 +272,8 @@ class navigation_leader:
 
 				# print("for coord", coord, "value ", self.get_pixel_value(coord[0], coord[1], self.map_grid))
 
-
-				if self.get_pixel_value(coord[0], coord[1], grid) in [0, '0']:
+########################
+				if self.get_pixel_value(coord[0], coord[1], grid) in [0, '0'] and self.surroundings_empty(coord[0], coord[1], 2):
 					finals.append(coord)
 
 		# print("neighbors for", pixel_x, pixel_y, finals,  "with map size is width=", self.map_width, "height=", self.map_height)
@@ -299,7 +312,15 @@ class navigation_leader:
 		'''
 		# set up initial values
 		# always need to visit the start
-		print("in dijkstra from ", start, "to", end)
+		print "in dijkstra from ", start, "to", end
+		print " which translates to from ", self.pixel_to_world(start[0], start[1]), " to ", self.pixel_to_world(end[0], end[1])
+
+		goal_coord = self.pixel_to_world(end[0], end[1])
+		self.goal_x = goal_coord[0]
+		self.goal_y = goal_coord[1]
+
+		print "SETTING GOAL ", self.goal_x, " ,  ", self.goal_y
+
 		nodes_to_visit = {start}
 		visited_nodes = set()
 		distance_from_start = defaultdict(lambda: float("inf"))
@@ -363,7 +384,37 @@ class navigation_leader:
 
 
 
+	def get_free_random_coord(self):
+		while True:
+			#generate a random pixel
+			random_pixel_x = random.randint(0,self.map_width)
+			random_pixel_y = random.randint(0,self.map_height)
+			# check if pixel is vacant
+			if self.get_pixel_value(random_pixel_x, random_pixel_y, self.map_grid) == 0:
 
+				# check that the surrounding coords are also empty
+				if self.surroundings_empty(random_pixel_x, random_pixel_y):
+
+					coord = self.pixel_to_world(random_pixel_x, random_pixel_y)
+					return coord
+
+
+
+
+
+	def surroundings_empty(self, pixel_x, pixel_y, radius = 5):
+
+		for x in range(pixel_x-radius, pixel_x+radius):
+			for y in range(pixel_y-radius, pixel_y+radius):
+
+				if x<0 or x >= self.map_width-10 or y<0 and y >= self.map_height-10:
+					return False
+
+				value = self.get_pixel_value(x,y,self.map_grid)
+				if value != 0:
+					return False
+
+		return True
 
 
 
