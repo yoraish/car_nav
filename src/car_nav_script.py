@@ -116,8 +116,9 @@ class navigation_leader:
 					start_pixel = self.world_to_pixel(self.current_x, self.current_y)
 					end_pixel = self.world_to_pixel(end_coord[0],end_coord[1])
 					# get the pixel path from dijkstra
-					pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
 
+					# pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
+					pixel_path = self.BFS(start_pixel, end_pixel)
 
 
 				# convert to a follow-able path (of Point32 objects in the world frame. no longer pixels)
@@ -404,7 +405,8 @@ class navigation_leader:
 
 
 	def surroundings_empty(self, pixel_x, pixel_y, radius = 5):
-
+		pixel_x = int(pixel_x)
+		pixel_y = int(pixel_y)
 		for x in range(pixel_x-radius, pixel_x+radius):
 			for y in range(pixel_y-radius, pixel_y+radius):
 
@@ -417,6 +419,54 @@ class navigation_leader:
 
 		return True
 
+
+	def BFS(self, start_pixel, end_pixel):
+		print "called BFS start ", start_pixel, "end ", end_pixel
+		# start and end are tuples of x and y in grid frame
+		# initialize variables
+		Q = list()
+		seen = set()
+		parent = dict()
+
+		# set goal for car
+		goal_coord = self.pixel_to_world(end_pixel[0], end_pixel[1])
+		self.goal_x = goal_coord[0]
+		self.goal_y = goal_coord[1]
+
+		# put first node  in seen and in @
+		seen.add(start_pixel)
+		Q.append(start_pixel)
+
+		while len(Q) > 0:
+			# take the first node out of the Q
+			node = Q.pop(0)
+			# go through the children of the node
+			children = self.get_possible_pixels(node[0], node[1])
+			for child in children:
+				# assign parent and mark seen
+				if child not in seen:
+					parent[child] = node
+					seen.add(child)
+					Q.append(child)
+					# chick if child is the goal, if it is then return a deconostructed path
+					if child == end_pixel:
+						return self.path_constructor(parent, start_pixel, end_pixel)
+
+
+		return None
+
+
+	def path_constructor(self, parents, start_pixel, end_pixel):
+		path = [end_pixel]
+		while True:
+			new_node = parents[path[0]]
+
+			path = [new_node] + path
+
+			# check if we just added the start node
+			if new_node == start_pixel:
+				print "path ", path
+				return path;
 
 
 
