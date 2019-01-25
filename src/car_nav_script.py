@@ -104,7 +104,7 @@ class navigation_leader:
 
 			# if this is the first time and we have enough data, generate a dijkstra path to a set point
 			
-			if self.map_grid != [] and self.paths == []:
+			if self.map_grid != [] and self.paths == [] :
 				print("constructing path")
 				pixel_path = None
 				while pixel_path == None:
@@ -131,6 +131,7 @@ class navigation_leader:
 				# self.goal_y = end_coord[1]
 				self.paths.append(path_example)
 				print("success with dijkstra! got path")
+				self.reached_goal = False
 				self.follow_path(self.paths[0])
 
 
@@ -167,7 +168,7 @@ class navigation_leader:
 				if abs(self.current_x - self.goal_x) < 0.15 and abs(self.current_y - self.goal_y) < 0.15:
 					# then we are close enough to the goal and can toggle the reach variable
 					self.reached_goal = True
-					print('reached goal')
+					print('reached goal,erasing all paths')
 					self.paths = []
 				else:
 
@@ -407,7 +408,7 @@ class navigation_leader:
 		for x in range(pixel_x-radius, pixel_x+radius):
 			for y in range(pixel_y-radius, pixel_y+radius):
 
-				if x<0 or x >= self.map_width-10 or y<0 and y >= self.map_height-10:
+				if x<0 or x >= self.map_width-10 or y<0 or y >= self.map_height-10:
 					return False
 
 				value = self.get_pixel_value(x,y,self.map_grid)
