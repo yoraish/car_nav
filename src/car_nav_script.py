@@ -289,7 +289,7 @@ class navigation_leader:
 				# print("for coord", coord, "value ", self.get_pixel_value(coord[0], coord[1], self.map_grid))
 
 ########################
-				if self.get_pixel_value(coord[0], coord[1], grid) in [0, '0'] and self.surroundings_empty(coord[0], coord[1], 2):
+				if self.get_pixel_value(coord[0], coord[1], grid) not in [100, -1, '0'] and self.surroundings_empty(coord[0], coord[1], 2):
 					finals.append(coord)
 
 		# print("neighbors for", pixel_x, pixel_y, finals,  "with map size is width=", self.map_width, "height=", self.map_height)
@@ -309,7 +309,13 @@ class navigation_leader:
 				# create the dictionary mapping adjacent nodes to their weight
 				neighbors_dict = dict()
 				for neighbor in neighbors:
-					neighbors_dict[neighbor] = 1 # all the weights are 1 in this example add cost function
+					print "neighbor=", neighbor
+					neighbors_dict[neighbor] = self.cost_function(self.filtered_map_grid, neighbor)
+
+
+					#1 # all the weights are 1 in this example add cost function
+				
+
 				# add the pixel we are working with, with its adjacent nodes to the weighted_graph
 				weighted_graph[pixel] = neighbors_dict
 
@@ -519,7 +525,13 @@ class navigation_leader:
 
 
 
-
+	def cost_function(self, grid, node):
+		# a function that returns the cost needed in order to reach certain node
+		#this cost is not on a certain ecge, but rather the cost of getting to the
+		# node from any adjacent node
+		# this cost is represented in the map as the value stored in the pixel coordinate
+		# node is tuple of form (pixel_x, pixel_y)
+		return self.get_pixel_value(node[0], node[1], grid)
 
 
 
