@@ -10,6 +10,8 @@ from tf.transformations import quaternion_from_euler
 import time
 from collections import defaultdict
 import random
+import scipy.ndimage
+import numpy
 
 # create a class that would send waypoints to the car
 class navigation_leader:
@@ -40,6 +42,10 @@ class navigation_leader:
 		self.map_width = 0
 		self.map_height = 0
 
+		# filtered map data
+		self.filtered_map_grid = [] # stores the map grid list after a gaussian filter
+
+
 
 		#init ros
 		rospy.init_node('car_nav')
@@ -64,6 +70,13 @@ class navigation_leader:
 			OccupancyGrid,
 			self.map_cb,
 			queue_size = 1)
+
+		# publisher for the filtered map we create (to stay away from obstacles)
+
+		self.filter_pub = rospy.Publisher('/gaussian_map', OccupancyGrid)
+
+
+
 
 		#while not shut down, keep this node spinning
 		while not rospy.is_shutdown():
@@ -117,8 +130,8 @@ class navigation_leader:
 					end_pixel = self.world_to_pixel(end_coord[0],end_coord[1])
 					# get the pixel path from dijkstra
 
-					# pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
-					pixel_path = self.BFS(start_pixel, end_pixel)
+					pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
+					# pixel_path =7 self.BFS(start_pixel, end_pixel)
 
 
 				# convert to a follow-able path (of Point32 objects in the world frame. no longer pixels)
@@ -187,7 +200,8 @@ class navigation_leader:
 		self.map_origin_y = map_msg.info.origin.position.y
 		self.map_grid = map_msg.data
 
-
+		# now that we have all the new information, also publish the guassian filter of the map
+		self.gaussian_filter()
 
 		# self.look_meter_pos_x()
 		# print("=====\n map origin at x=", self.map_origin_x, " y=", self.map_origin_y)
@@ -295,7 +309,7 @@ class navigation_leader:
 				# create the dictionary mapping adjacent nodes to their weight
 				neighbors_dict = dict()
 				for neighbor in neighbors:
-					neighbors_dict[neighbor] = 1 # all the weights are 1 in this example
+					neighbors_dict[neighbor] = 1 # all the weights are 1 in this example add cost function
 				# add the pixel we are working with, with its adjacent nodes to the weighted_graph
 				weighted_graph[pixel] = neighbors_dict
 
@@ -467,6 +481,42 @@ class navigation_leader:
 			if new_node == start_pixel:
 				print "path ", path
 				return path;
+
+	def gaussian_filter(self):
+		# this function applies a gaussian filter on the map we got from /projected_map
+		# it also publishes a filtered map to the topic /gaussian_map
+		# rviz can subscribe to that topic and overlay the blurred map on the actual occupancy grid
+
+		# convert map to a numpy array
+		map_array = numpy.array(self.map_grid)
+		map_array = numpy.reshape(map_array, (-1, self.map_width))
+
+		# apply the filter
+		filtered = scipy.ndimage.gaussian_filter(map_array, 2.4)
+
+		# convert to a ROS OccupancyGrid msg object
+		msg = OccupancyGrid()
+		msg.header.stamp = rospy.Time(0)
+		msg.header.frame_id = "/world"
+		msg.info.resolution = self.map_resolution
+		msg.info.width = self.map_width
+		msg.info.height = self.map_height
+
+		msg.info.origin.position.x = self.map_origin_x
+		msg.info.origin.position.y = self.map_origin_y
+
+		map_lists = filtered.tolist()
+
+		# convert to one list
+		msg.data = [item for row in map_lists for item in row]
+
+		# publish the data
+		self.filter_pub.publish(msg)
+
+		# store the data locally too, so we won't have to subscribe to this topic
+		self.filtered_map_grid = msg.data
+
+
 
 
 
