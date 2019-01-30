@@ -73,7 +73,7 @@ class navigation_leader:
 
 		# publisher for the filtered map we create (to stay away from obstacles)
 
-		self.filter_pub = rospy.Publisher('/gaussian_map', OccupancyGrid)
+		self.filter_pub = rospy.Publisher('/gaussian_map', OccupancyGrid, queue_size=1)
 
 
 
@@ -130,9 +130,9 @@ class navigation_leader:
 					end_pixel = self.world_to_pixel(end_coord[0],end_coord[1])
 					# get the pixel path from dijkstra
 
-					pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
-					# pixel_path =7 self.BFS(start_pixel, end_pixel)
-
+					# pixel_path = self.dijkstra_to_goal(self.weighted_graph(), start_pixel, end_pixel)
+					# pixel_path = self.BFS(start_pixel, end_pixel)
+					pixel_path =  self.a_star(self.filtered_map_grid, start_pixel, end_pixel)
 
 				# convert to a follow-able path (of Point32 objects in the world frame. no longer pixels)
 				path_example = self.path_from_pixels_list(pixel_path)
@@ -440,6 +440,85 @@ class navigation_leader:
 		return True
 
 
+	def a_star(self, grid, start_pixel, goal_pixel):
+		# want to keep track of a couple of things:
+		# * seen nodes, that will not be considered again
+		# * parent, a dictionary mapping each node to its optimal parent
+		# * priority queue, mapping each node to its current score (heuristic + cost from start)
+		# * dist from start, mappind each node to its diestance from start (for calculations)
+
+
+		# set goal for car
+		goal_coord = self.pixel_to_world(goal_pixel[0], goal_pixel[1])
+		self.goal_x = goal_coord[0]
+		self.goal_y = goal_coord[1]
+
+
+		parent = dict()
+		seen = set()
+		Q = {} # defaultdict(lambda: float("inf"))
+		start_dist = dict()
+
+		# we know that the distance from the start to itself is 0
+		start_dist[start_pixel] = 0
+		# we also know that the score of the start pixel is only the heuristic value, since start distance to itself is 0
+		Q[start_pixel] = self.heuristic_function(start_pixel, goal_pixel)
+
+		# now we can get to work:
+		# as long as the queue is not empty, continue
+		while Q:
+			# pop the first item from the queue
+			# since this is a priority queue, then the first item will be the one with the smallest score.
+			node = tuple()
+			node_score = float("inf")
+			for node_in_Q, score in Q.items():
+				if score < node_score:
+					node = node_in_Q
+					node_score= score
+			print "in Q=", Q
+			print "smallest node", node
+
+			# now we have the item with the smallest score, pop it out of the Q
+			Q.pop(node)
+
+			# if this is the goal pixel, we can break and return a reconstructed path
+			if node == goal_pixel:
+				path = self.path_constructor(parent, start_pixel, goal_pixel)
+				return path
+
+			# otherwise, look through its children
+			adjacent = self.get_possible_pixels(node[0], node[1], grid)
+
+			for child in adjacent:
+				# only work on child if not seen yet
+				if child not in seen:
+					# mark as seen
+					seen.add(child)
+					# calculate score for child:
+					# score = heuristic + distance from start of parent + distance from parent to child
+					child_start_dist = start_dist[node] + self.cost_function(grid, child)
+					child_score = self.heuristic_function(child, goal_pixel) + child_start_dist
+
+					# if this score is better than the one associated currently (if there is one associated at all)
+					# then update parent, Q, and dist from start
+					if child in Q:
+						if child_score < Q[child]:
+							parent[child] = node
+							Q[child] = child_score
+							start_dist[child] = start_child_dist
+					else:
+						# if not in Q at all, then the associated score of child in infinity and we can just assign the current score to child
+						# since the new values will always be less than infinity
+
+						parent[child] = node
+						Q[child] = child_score
+						start_dist[child] = child_start_dist
+
+
+		print "returning none from A*"
+		return None
+
+
 	def BFS(self, start_pixel, end_pixel):
 		print "called BFS start ", start_pixel, "end ", end_pixel
 		# start and end are tuples of x and y in grid frame
@@ -525,13 +604,18 @@ class navigation_leader:
 
 
 
-	def cost_function(self, grid, node):
+	def cost_function(self, grid, node_pixel):
 		# a function that returns the cost needed in order to reach certain node
 		#this cost is not on a certain ecge, but rather the cost of getting to the
 		# node from any adjacent node
 		# this cost is represented in the map as the value stored in the pixel coordinate
 		# node is tuple of form (pixel_x, pixel_y)
-		return self.get_pixel_value(node[0], node[1], grid)
+		return self.get_pixel_value(node_pixel[0], node_pixel[1], grid)
+
+	def heuristic_function(self, start_pixel, goal_pixel):
+		# this function will return the manhattan distance from the start to the goal
+		# the distance will be given in units of pixels, and will be used as a (n admissable) heuristic for A*
+		return abs(start_pixel[0] - goal_pixel[0] + start_pixel[1] - goal_pixel[1])
 
 
 
