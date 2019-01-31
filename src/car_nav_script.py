@@ -6,7 +6,7 @@ import actionlib
 # from composit_planner.msg import *
 from nav_msgs.msg import Path, OccupancyGrid
 from geometry_msgs.msg import *
-from tf.transformations import quaternion_from_euler
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import time
 from collections import defaultdict
 import random
@@ -24,6 +24,11 @@ class navigation_leader:
 		# variables for checking if reached end of navigation
 		self.current_x = 0.0 # in world frame
 		self.current_y = 0.0
+		self.roll = None
+		self.pitch = None
+		self.yaw = None
+
+
 		self.goal_x = 0.0
 		self.goal_y = 0.0
 		self.reached_goal = True
@@ -114,6 +119,18 @@ class navigation_leader:
 			self.current_x = pose_msg.pose.position.x
 			self.current_y = pose_msg.pose.position.y
 
+			# calculate the euler pose values from the quaternion
+			quaternion = (
+				pose_msg.pose.orientation.x,
+				pose_msg.pose.orientation.y,
+				pose_msg.pose.orientation.z,
+				pose_msg.pose.orientation.w)
+			euler = euler_from_quaternion(quaternion)
+			self.roll = euler[0]
+			self.pitch = euler[1]
+			self.yaw = euler[2]
+
+			print "yaw= ", self.yaw/3.1415*180
 
 			# if this is the first time and we have enough data, generate a dijkstra path to a set point
 			
@@ -413,6 +430,13 @@ class navigation_leader:
 			random_pixel_y = random.randint(0,self.map_height)
 			# check if pixel is vacant
 			if self.get_pixel_value(random_pixel_x, random_pixel_y, self.map_grid) == 0:
+
+				# # check if the pixel is in the allowable segment in front of the robot
+				# segment_angle = numpy.pi/2 # in radians!
+
+				# #calculate angle of found point with the location of the robot, with respect to the y axis (forward when initializing)
+				# point_angle = 
+
 
 				# check that the surrounding coords are also empty
 				if self.surroundings_empty(random_pixel_x, random_pixel_y):
