@@ -34,8 +34,10 @@ class navigation_leader:
 		self.reached_goal = True
 
 		# self.current_path_index = -1;
-		# paths lists, only for testing
-		self.paths = [] # [[Point32(1,0,0),Point32(2, 0, 0)], [Point32(2.5, 0.5, 0.0), Point32(3.0, 0.5, 0.0)]]
+		# paths lists, can be manually populated for testing, for example:
+		# self.paths = [[Point32(1,0,0),Point32(2, 0, 0)], [Point32(2.5, 0.5, 0.0), Point32(3.0, 0.5, 0.0)]]
+    
+		self.paths = [] 
 
 		# variables for map
 		self.map_origin_x = 0.0 # in the world frame
@@ -50,12 +52,8 @@ class navigation_leader:
 		# filtered map data
 		self.filtered_map_grid = [] # stores the map grid list after a gaussian filter
 
-
-
 		#init ros
 		rospy.init_node('car_nav')
-
-
 
 
 		#publish to trajectory topics
@@ -81,16 +79,12 @@ class navigation_leader:
 		self.filter_pub = rospy.Publisher('/gaussian_map', OccupancyGrid, queue_size=1)
 
 
-
-
 		#while not shut down, keep this node spinning
 		while not rospy.is_shutdown():
 			rospy.spin()
 
 	def follow_path(self, path_list):
 	    # path list is a list of Point32 objects -- which are the waypoints to be followed
-	    print('#####sending a sequence')
-	    print path_list
 	    
 	    # store the last goal as the goal we are going to 
 	    # self.goal_x = path_list[-1].x
@@ -138,8 +132,7 @@ class navigation_leader:
 				print("constructing path")
 				pixel_path = None
 				while pixel_path == None:
-					# print("int the loop")
-					# go to (2, 0.5, 0)
+
 					end_coord =  self.get_free_random_coord(); #(2,0.2)
 
 					# first step is to convet start and end coord to pixels
@@ -157,15 +150,11 @@ class navigation_leader:
 				# add the last coordinate in the world frame to the class variable goal - so checking whether
 				# got there or not would be possible
 
-				# end_coord = self.pixel_to_world(end_pixel[0], end_pixel[1]) ##############
-				# self.goal_x = end_coord[0]
-				# self.goal_y = end_coord[1]
+
 				self.paths.append(path_example)
-				print("success with dijkstra! got path")
+				print("success path generation! got path")
 				self.reached_goal = False
 				self.follow_path(self.paths[0])
-
-
 
 
 
@@ -220,15 +209,6 @@ class navigation_leader:
 		# now that we have all the new information, also publish the guassian filter of the map
 		self.gaussian_filter()
 
-		# self.look_meter_pos_x()
-		# print("=====\n map origin at x=", self.map_origin_x, " y=", self.map_origin_y)
-		# robot_pixel = self.world_to_pixel(self.current_x, self.current_y);
-		# print("=====\n robot at pixel x=", robot_pixel[0], " y=",robot_pixel[1])
-		# print(" the value of the pixel=", self.get_pixel_value(robot_pixel[0], robot_pixel[1], self.map_grid))
-
-		# robot_world= self.pixel_to_world(robot_pixel[0], robot_pixel[1])
-		# print("=====\n should be at x =", self.current_x, "y=", self.current_y)
-		# print(" calculated at x=", robot_world[0], "y=", robot_world[1])
 
 	def look_meter_pos_x(self):
 		# prints the occupancy values in the next meter in the positive x direction
@@ -283,7 +263,7 @@ class navigation_leader:
 
 		# the allowed moves are up down left right
 		# return a list of tuples that only include coordinates of cells that are empty
-		tries = [] #[(pixel_x, pixel_y+1), (pixel_x, pixel_y-1), (pixel_x+1, pixel_y), (pixel_x-1, pixel_y)]
+		tries = [] 
 
 		tries += [(pixel_x, pixel_y+1)]
 		tries.append((pixel_x, pixel_y-1))
@@ -295,22 +275,15 @@ class navigation_leader:
 		tries.append((pixel_x-1, pixel_y+1))
 		tries.append((pixel_x+1, pixel_y-1))
 
-		# print tries
 
 		finals = []
 		for coord in tries:
 
 			if coord[0] < self.map_width and coord[0] >= 0 and coord[1] < self.map_height and coord[1] >= 0:
 
-
-				# print("for coord", coord, "value ", self.get_pixel_value(coord[0], coord[1], self.map_grid))
-
-########################
 				if self.get_pixel_value(coord[0], coord[1], grid) not in [100, -1, '0'] and self.surroundings_empty(coord[0], coord[1], 2):
 					finals.append(coord)
 
-		# print("neighbors for", pixel_x, pixel_y, finals,  "with map size is width=", self.map_width, "height=", self.map_height)
-		# print "\n\n"
 		return finals
 
 
@@ -327,11 +300,7 @@ class navigation_leader:
 				neighbors_dict = dict()
 				for neighbor in neighbors:
 					print "neighbor=", neighbor
-					neighbors_dict[neighbor] = self.cost_function(self.filtered_map_grid, neighbor)
-
-
-					#1 # all the weights are 1 in this example add cost function
-				
+					neighbors_dict[neighbor] = self.cost_function(self.filtered_map_grid, neighbor)				
 
 				# add the pixel we are working with, with its adjacent nodes to the weighted_graph
 				weighted_graph[pixel] = neighbors_dict
@@ -413,7 +382,7 @@ class navigation_leader:
 
 		path_list = []
 		for pixel in pixels_list:
-			############### might take some points out here to make it easier on the robot to follow
+			# * may take some points out here to make it easier on the robot to follow, though seems to be doing okay with all the points so far
 			# convert to world frame
 			coord = self.pixel_to_world(pixel[0], pixel[1])
 			# convert the coord tuple to Point32 and add to the list
@@ -423,7 +392,7 @@ class navigation_leader:
 
 
 
-	def get_free_random_coord(self):
+	def get_free_random_coord(self, segment_angle = numpy.pi/2):
 		while True:
 			#generate a random pixel
 			random_pixel_x = random.randint(0,self.map_width)
@@ -432,19 +401,21 @@ class navigation_leader:
 			if self.get_pixel_value(random_pixel_x, random_pixel_y, self.map_grid) == 0:
 
 				# # check if the pixel is in the allowable segment in front of the robot
-				# segment_angle = numpy.pi/2 # in radians!
+				segment_angle = numpy.pi/2 # in radians!
 
-				# #calculate angle of found point with the location of the robot, with respect to the y axis (forward when initializing)
-				# point_angle = 
+				# #calculate angle of found point with the location of the robot, with respect to the x axis (forward when initializing)
+                current_pixel = self.world_to_pixel(self.current_x, self.current_y)
+				point_angle = numpy.arctan(  (random_pixel_y - current_pixel[1])/(random_pixel_x - current_pixel[0])  )
+                if point_angle<0: point_angle+=numpy.pi
 
+                # we want out angle with the random point to be within the sector created by the allowed angle range aroung the heading
+                if self.yaw - segment_angle <= point_angle and point_angle <= self.yaw + segment_angle :
+                    # if in sector, we can check if the coord is good
+                    # check that the surrounding coords are also empty
+                    if self.surroundings_empty(random_pixel_x, random_pixel_y):
 
-				# check that the surrounding coords are also empty
-				if self.surroundings_empty(random_pixel_x, random_pixel_y):
-
-					coord = self.pixel_to_world(random_pixel_x, random_pixel_y)
-					return coord
-
-
+                        coord = self.pixel_to_world(random_pixel_x, random_pixel_y)
+                        return coord
 
 
 
@@ -652,7 +623,7 @@ if __name__ == '__main__':
 	print("car_nav_script is ALIVE")
 
 	try:
-		print("##### trying the navigation leaader class")
+		print("Trying the navigation leader class")
 		navigation_leader()
 	except rospy.ROSInterruptException:
-		rospy.loginfo("#############Navigation test finished.")
+		rospy.loginfo("Navigation test finished.")
